@@ -21,6 +21,7 @@ type memeBot struct {
 	id      string
 	session *discordgo.Session
 	conf    memeBotConf
+	db      *sql.DB
 }
 
 type memeBotConf struct {
@@ -89,7 +90,22 @@ func main() {
 	for _, msg := range messages {
 		saveAttachment(msg.Attachments)
 	}
+
+	httpConf := httpConf{
+		os.Getenv("HTTP_HOST"),
+		os.Getenv("HTTP_PORT_PLAIN"),
+		os.Getenv("HTTP_PORT_SECURE"),
+		os.Getenv("HTTP_URL"),
+		os.Getenv("HTTP_CERT"),
+		os.Getenv("HTTP_KEY"),
+	}
+
+	err = startHTTPServer(httpConf)
+	if err != nil {
+		panic(err)
+	}
 	wg.Wait()
+
 }
 
 func (bot *memeBot) messageHandler(botSession *discordgo.Session, message *discordgo.MessageCreate) {
