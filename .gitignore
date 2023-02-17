@@ -1,3 +1,4 @@
 .env
 .vscode
 certs/server.key
+.DS_Store

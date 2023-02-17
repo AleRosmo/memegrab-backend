@@ -84,6 +84,9 @@ func main() {
 		os.Getenv("DB_SSLMODE"),
 	}
 	db, err := pgInit(dbConf)
+	if err != nil {
+		panic(err)
+	}
 	defer db.Close()
 
 	messages := getChannelMessages(botSession, conf)
@@ -100,12 +103,11 @@ func main() {
 		os.Getenv("HTTP_KEY"),
 	}
 
-	err = startHTTPServer(httpConf)
+	err = startHTTPServer(httpConf, db)
 	if err != nil {
 		panic(err)
 	}
 	wg.Wait()
-
 }
 
 func (bot *memeBot) messageHandler(botSession *discordgo.Session, message *discordgo.MessageCreate) {

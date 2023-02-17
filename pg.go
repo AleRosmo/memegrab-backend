@@ -30,3 +30,28 @@ func pgInit(conf pgConf) (*sql.DB, error) {
 	log.Println("Successfully initialized DB connection")
 	return db, nil
 }
+
+func dbLogin(db *sql.DB, username string) (*credentials, error) {
+	sqlStatement := `SELECT id, username, password FROM users.login WHERE username=$1;`
+
+	var id string
+	var hash string
+
+	row := db.QueryRow(sqlStatement, username)
+
+	switch err := row.Scan(&id, &username, &hash); err {
+	case sql.ErrNoRows:
+		log.Println("No rows return")
+		return nil, err
+	case nil:
+		creds := credentials{
+			id:       id,
+			username: username,
+			password: hash,
+		}
+		return &creds, nil
+	default:
+		log.Println("Login general error")
+		return nil, err
+	}
+}
