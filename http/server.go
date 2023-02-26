@@ -1,9 +1,9 @@
-package main
+package http
 
 import (
 	"database/sql"
-	"fmt"
 	"log"
+	"memegrab/sessions"
 	"net/http"
 	"path/filepath"
 	"text/template"
@@ -13,9 +13,8 @@ import (
 	"golang.org/x/net/http2/h2c"
 )
 
-// For URL use only domain name eg: google.it not https://google.it
-type httpConf struct {
-	host       string
+type Config struct {
+	Host       string
 	portPlain  string
 	portSecure string
 	URL        string
@@ -23,23 +22,20 @@ type httpConf struct {
 	keyPath    string
 }
 
-func startHTTPServer(conf httpConf, db *sql.DB) error {
-	httpAddr := fmt.Sprintf("%s:%s", conf.host, conf.portPlain)
-	mux := http.NewServeMux()
-
+func Start(conf *Config, router *Router) *http.Server {
 	h2s := &http2.Server{}
 	h1s := &http.Server{
-		Addr:    httpAddr,
-		Handler: h2c.NewHandler(mux, h2s),
+		Addr:    conf.Host + conf.portPlain,
+		Handler: h2c.NewHandler(router, h2s),
 	}
+	log.Panic(h1s.ListenAndServe())
+	return h1s
+}
 
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
-			notFound(w, r)
-		} else {
-			index(w, r)
-		}
-	})
+// For URL use only domain name eg: google.it not https://google.it
+
+func startHTTPServer(conf Config, db *sql.DB) error {
+	// httpAddr := fmt.Sprintf("%s:%s", conf.Host, conf.portPlain)
 
 	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		login(w, r, db)
@@ -47,41 +43,6 @@ func startHTTPServer(conf httpConf, db *sql.DB) error {
 
 	log.Fatal(h1s.ListenAndServe())
 
-	// httpServer
-	// log.Println("Starting HTTP Server ")
-
-	// fs := http.FileServer(http.Dir("./static"))
-	// http.Handle("/static/", http.StripPrefix("/static/", fs))
-
-	// http.HandleFunc("/favicon.ico", favicon)
-	// http.HandleFunc("/", root)
-
-	// httpsAddr := fmt.Sprintf("%s:%s", conf.host, conf.portSecure)
-
-	// httpUrl := fmt.Sprintf("http://%s", conf.URL)
-	// httpsUrl := fmt.Sprintf("https://%s", conf.URL)
-
-	// HTTP Listener
-	// wg.Add(1)
-	// go func() {
-	// 	err := http.ListenAndServe(httpAddr, nil)
-	// 	if err != nil {
-	// 		log.Println("Failed to start HTTP listener")
-	// 		return
-	// 	}
-	// 	log.Println("Started HTTP listener")
-	// }()
-
-	// // HTTPS Listener
-	// wg.Add(1)
-	// go func() {
-	// 	log.Println("Failed to start HTTPS listener")
-	// 	err := http.ListenAndServeTLS(httpsAddr, conf.crtPath, conf.keyPath, nil)
-	// 	if err != nil {
-	// 		return
-	// 	}
-	// 	log.Println("Started HTTPS listener")
-	// }()
 	log.Println("HTTP Server succesfully started") // TODO: Move back in main func
 	return nil
 }
@@ -101,7 +62,7 @@ func index(w http.ResponseWriter, r *http.Request) {
 func login(w http.ResponseWriter, r *http.Request, db *sql.DB) error {
 	defer r.Body.Close()
 
-	_, err := validate(w, r, db)
+	_, err := Validate(w, r, db)
 	if err == nil {
 		// TODO: Extend session upon device validation
 		log.Println("Session found - redirecting to app")
@@ -110,10 +71,9 @@ func login(w http.ResponseWriter, r *http.Request, db *sql.DB) error {
 	}
 
 	if r.Method == http.MethodPost {
-
-		login := credentials{
-			username: r.PostForm.Get("username"),
-			password: r.PostForm.Get("password"),
+		login := sessions.Credentials{
+			Username: r.PostForm.Get("username"),
+			Password: r.PostForm.Get("password"),
 		}
 
 		loginDb, err := dbLogin(db, login.username)

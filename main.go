@@ -18,7 +18,6 @@ import (
 )
 
 type memeBot struct {
-	id      string
 	session *discordgo.Session
 	conf    memeBotConf
 	db      *sql.DB
@@ -59,7 +58,6 @@ func main() {
 		panic(err)
 	}
 	memeBot := &memeBot{
-		id:      "1",
 		session: botSession,
 		conf:    conf,
 	}
@@ -73,7 +71,7 @@ func main() {
 		panic(err)
 	}
 	log.Println("Bot Started")
-	log.Printf("Bot ID: %v\n", memeBot.id)
+	// log.Printf("Bot ID: %v\n", memeBot.id)
 
 	dbConf := pgConf{
 		os.Getenv("DB_HOST"),

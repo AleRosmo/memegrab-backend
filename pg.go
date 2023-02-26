@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"memegrab/sessions"
 )
 
 type pgConf struct {
@@ -31,7 +32,7 @@ func pgInit(conf pgConf) (*sql.DB, error) {
 	return db, nil
 }
 
-func dbLogin(db *sql.DB, username string) (*credentials, error) {
+func dbLogin(db *sql.DB, username string) (*sessions.Credentials, error) {
 	sqlStatement := `SELECT id, username, password FROM users.login WHERE username=$1;`
 
 	var id string
@@ -44,10 +45,10 @@ func dbLogin(db *sql.DB, username string) (*credentials, error) {
 		log.Println("No rows return")
 		return nil, err
 	case nil:
-		creds := credentials{
-			id:       id,
-			username: username,
-			password: hash,
+		creds := sessions.Credentials{
+			ID:       id,
+			Username: username,
+			Password: hash,
 		}
 		return &creds, nil
 	default:
