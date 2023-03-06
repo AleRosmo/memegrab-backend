@@ -35,7 +35,7 @@ func pgInit(conf pgConf) (*sql.DB, error) {
 func dbLogin(db *sql.DB, username string) (*sessions.Credentials, error) {
 	sqlStatement := `SELECT id, username, password FROM users.login WHERE username=$1;`
 
-	var id string
+	var id int
 	var hash string
 
 	row := db.QueryRow(sqlStatement, username)

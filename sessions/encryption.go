@@ -9,7 +9,7 @@ import (
 )
 
 // TODO: Move to bcrypt from b64
-func saltedUUID(password string) string {
+func SaltedUUID(password string) string {
 	saltSize := 32
 	bRand := make([]byte, saltSize)
 	_, err := rand.Read(bRand[:])
@@ -25,7 +25,7 @@ func saltedUUID(password string) string {
 	return base64.StdEncoding.EncodeToString(sum)
 }
 
-func matchHash(uuid string, password []byte, salt []byte) error {
+func MatchHash(uuid string, password []byte, salt []byte) error {
 	bRand := []byte(salt)
 	bPassword := []byte(password)
 	sha512Hasher := sha512.New()

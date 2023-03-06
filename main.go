@@ -6,11 +6,14 @@ import (
 	"io"
 	"log"
 	"math/rand"
+	"memegrab/cattp"
+	"memegrab/sessions"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/joho/godotenv"
@@ -18,15 +21,36 @@ import (
 )
 
 type memeBot struct {
-	session *discordgo.Session
-	conf    memeBotConf
-	db      *sql.DB
+	discord *discordgo.Session
+	// sessions sessions.SessionManager
+	conf memeBotConf
+	db   *sql.DB
+}
+
+// TODO: Saved files in properties for memeBot, duplicate files
+func (bot *memeBot) saveDbMessage(file *fileInfo) (*fileInfo, error) {
+	query := `INSERT INTO public.saved (filename) VALUES ($1) RETURNING id;`
+	var id int
+
+	err := bot.db.QueryRow(query, file.filename).Scan(&id)
+	if err != nil {
+		return nil, err
+	}
+	file.id = id
+	log.Printf("Saved to DB %s with ID %d\n", file.filename, id)
+
+	return file, nil
 }
 
 type memeBotConf struct {
 	token            string
 	guildId          string
 	observedChannels []string
+}
+
+type fileInfo struct {
+	id       int
+	filename string
 }
 
 func init() {
@@ -57,12 +81,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	memeBot := &memeBot{
-		session: botSession,
-		conf:    conf,
-	}
-
-	botSession.AddHandler(memeBot.messageHandler)
 
 	defer wg.Done()
 	wg.Add(1)
@@ -81,27 +99,46 @@ func main() {
 		os.Getenv("DB_NAME"),
 		os.Getenv("DB_SSLMODE"),
 	}
+
 	db, err := pgInit(dbConf)
 	if err != nil {
 		panic(err)
 	}
+
 	defer db.Close()
+
+	memeBot := &memeBot{
+		discord: botSession,
+		conf:    conf,
+		db:      db,
+	}
+
+	botSession.AddHandler(memeBot.messageHandler)
+
+	sessionLen := time.Now().Add(time.Hour * 720)
+	sessions := sessions.New(sessionLen)
+
+	dbFiles := getDbMessages(db)
+	for _, file := range dbFiles {
+		fmt.Printf("DB Info: %d - Filename: %s\n", file.id, file.filename)
+	}
 
 	messages := getChannelMessages(botSession, conf)
 	for _, msg := range messages {
-		saveAttachment(msg.Attachments)
+		memeBot.saveAttachment(msg.Attachments)
 	}
 
-	httpConf := httpConf{
-		os.Getenv("HTTP_HOST"),
-		os.Getenv("HTTP_PORT_PLAIN"),
-		os.Getenv("HTTP_PORT_SECURE"),
-		os.Getenv("HTTP_URL"),
-		os.Getenv("HTTP_CERT"),
-		os.Getenv("HTTP_KEY"),
+	httpConf := cattp.Config{
+		Host: os.Getenv("HTTP_HOST"),
+		// os.Getenv("HTTP_PORT_PLAIN"),
+		// os.Getenv("HTTP_PORT_SECURE"),
+		Port: os.Getenv("HTTP_PORT_PLAIN"),
+		// os.Getenv("HTTP_CERT"),
+		//  os.Getenv("HTTP_KEY"),
+		URL: os.Getenv("HTTP_URL"),
 	}
 
-	err = startHTTPServer(httpConf, db)
+	err = startWebApp(httpConf, db, sessions)
 	if err != nil {
 		panic(err)
 	}
@@ -112,7 +149,7 @@ func (bot *memeBot) messageHandler(botSession *discordgo.Session, message *disco
 	log.Printf("New message from ID: %v\n", message.Author.ID)
 
 	if strings.Contains(message.Content, "fanculo") {
-		bot.session.ChannelMessageSend(message.ChannelID, "Ma si andiamo tutti affanculo")
+		bot.discord.ChannelMessageSend(message.ChannelID, "Ma si andiamo tutti affanculo")
 	}
 
 	if message.Author.ID == botSession.State.User.ID {
@@ -139,7 +176,7 @@ func (bot *memeBot) messageHandler(botSession *discordgo.Session, message *disco
 				}
 				log.Printf("Reacted with 🍌 to message ID: %s\n", message.ID)
 			}
-			err := saveAttachment(message.Attachments)
+			err := bot.saveAttachment(message.Attachments)
 			if err != nil {
 				log.Println("Error in saving attachment file")
 				return
@@ -149,7 +186,11 @@ func (bot *memeBot) messageHandler(botSession *discordgo.Session, message *disco
 	}
 }
 
-func saveAttachment(attachments []*discordgo.MessageAttachment) error {
+// TODO: Avoid logging duplicates (for double posts)
+// TODO: Check file signature ?????????? in SHA to avoid duplicated files
+// * SHURI SUGGESTS:
+// * To verify it's indetical get the lenght, split in 2048 bytes chunks and compare each chunk
+func (bot *memeBot) saveAttachment(attachments []*discordgo.MessageAttachment) error {
 	for _, attach := range attachments {
 
 		res, err := http.Get(attach.URL)
@@ -172,6 +213,13 @@ func saveAttachment(attachments []*discordgo.MessageAttachment) error {
 			return err
 		}
 		log.Printf("Written %d bytes to file %s\n", written, attach.Filename)
+
+		f := &fileInfo{filename: attach.Filename}
+		f, err = bot.saveDbMessage(f)
+		if err != nil {
+			return err
+		}
+		log.Printf("Saved file %s in DB with ID %d\n", f.filename, f.id)
 	}
 	return nil
 }
@@ -195,6 +243,29 @@ func getChannelMessages(botSession *discordgo.Session, conf memeBotConf) []*disc
 	return nil
 }
 
-func getDbMessages(db *sql.DB, channels []string) {
+func getDbMessages[T []*fileInfo](db *sql.DB) T {
+	query := `SELECT * FROM public.saved;`
 
+	var files T
+
+	rows, err := db.Query(query)
+	if err != nil {
+		panic(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int
+		var filename string
+		// TODO: Recheck
+		err = rows.Scan(&id, &filename)
+		if err != nil {
+			panic(err)
+		}
+		info := &fileInfo{id, filename}
+		files = append(files, info)
+	}
+	if rows.Err() != nil {
+		panic(err)
+	}
+	return files
 }

@@ -9,13 +9,13 @@ import (
 )
 
 type Credentials struct {
-	ID       string
+	ID       int
 	Username string
 	Password string
 }
 
 type SessionManager interface {
-	Create(*sql.DB, string, string, time.Time) *session
+	Create(*sql.DB, string, int, time.Time) *session
 	Delete(*sql.DB, string) error
 	Validate(*sql.DB, *http.Request) (*session, error)
 	Read(*sql.DB, string) (*session, error)
@@ -34,7 +34,7 @@ type Manager struct {
 }
 
 // TODO: Some decent in error checking would be nice
-func (sm *Manager) Create(db *sql.DB, token string, id string, lenght time.Time) *session {
+func (sm *Manager) Create(db *sql.DB, token string, id int, lenght time.Time) *session {
 	var _lenght time.Time = sm.defaultLenght
 
 	if !lenght.IsZero() {
@@ -128,7 +128,7 @@ func (sm *Manager) Validate(db *sql.DB, r *http.Request) (*session, error) {
 func (sm *Manager) Read(db *sql.DB, token string) (*session, error) {
 	sqlStatement := `SELECT * FROM http.sessions WHERE session_token=$1;`
 
-	var id string
+	var id int
 	var created time.Time
 	var expires time.Time
 
@@ -167,7 +167,7 @@ func (sm *Manager) Delete(db *sql.DB, token string) error {
 }
 
 type session struct {
-	userId  string
+	userId  int
 	token   string
 	created time.Time
 	expiry  time.Time
