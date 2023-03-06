@@ -41,10 +41,10 @@ func (sm *Manager) Create(db *sql.DB, token string, id int, lenght time.Time) *s
 		_lenght = lenght
 	}
 	session := &session{
-		userId:  id,
-		token:   token,
-		created: time.Now(),
-		expiry:  _lenght,
+		UserId:  id,
+		Token:   token,
+		Created: time.Now(),
+		Expiry:  _lenght,
 	}
 
 	// TODO: MUST be a db function
@@ -57,7 +57,7 @@ func (sm *Manager) Create(db *sql.DB, token string, id int, lenght time.Time) *s
 			session_token = excluded.session_token,
 			created = excluded.created;
 	`
-	db.QueryRow(sqlStatement, id, _lenght, token, session.created)
+	db.QueryRow(sqlStatement, id, _lenght, token, session.Created)
 
 	sm.activeSessions = append(sm.activeSessions, session)
 	log.Println("Saved new session")
@@ -81,7 +81,7 @@ func (sm *Manager) Validate(db *sql.DB, r *http.Request) (*session, error) {
 	var userSession *session
 	var idx int
 	for i, session := range sm.activeSessions {
-		if session.token == cookie.Value {
+		if session.Token == cookie.Value {
 			userSession = session
 			idx = i
 			// Continues to search session in DB
@@ -105,7 +105,7 @@ func (sm *Manager) Validate(db *sql.DB, r *http.Request) (*session, error) {
 	}
 
 	if userSession.isExpired() {
-		sm.Delete(db, userSession.token)
+		sm.Delete(db, userSession.Token)
 
 		// Remove from activeSessions slice
 		sm.activeSessions[idx] = sm.activeSessions[len(sm.activeSessions)-1]
@@ -140,10 +140,10 @@ func (sm *Manager) Read(db *sql.DB, token string) (*session, error) {
 
 	case nil:
 		session := &session{
-			userId:  id,
-			token:   token,
-			created: created,
-			expiry:  expires,
+			UserId:  id,
+			Token:   token,
+			Created: created,
+			Expiry:  expires,
 		}
 		return session, nil
 	default:
@@ -167,14 +167,22 @@ func (sm *Manager) Delete(db *sql.DB, token string) error {
 }
 
 type session struct {
-	userId  int
-	token   string
-	created time.Time
-	expiry  time.Time
+	UserId  int
+	Token   string
+	Created time.Time
+	Expiry  time.Time
+}
+
+func (s *session) SetClientCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:    "session_token",
+		Value:   s.Token,
+		Expires: s.Expiry,
+	})
 }
 
 func (s *session) isExpired() bool {
-	return s.expiry.Before(time.Now())
+	return s.Expiry.Before(time.Now())
 }
 
 // func store(db *sql.DB, id string, token string, created time.Time, expires time.Time) (err error) {

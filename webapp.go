@@ -13,15 +13,22 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+type profile struct {
+	ID          int       `json:"user_id"`
+	Username    string    `json:"username"`
+	Permissions []string  `json:"isAdmin"`
+	DisplayName string    `json:"display_name"`
+	IsOnline    bool      `json:"isOnline"`
+	LastLogin   time.Time `json:"lastLogin"`
+	LastOffline time.Time `json:"lastOffline"`
+}
+
 type webapp struct {
 	sessions sessions.SessionManager
 	db       *sql.DB
-	// login    cattp.Handler
-	// root   cattp.Handler
 }
 
 // For URL use only domain name eg: google.it not https://google.it
-
 func startWebApp(conf cattp.Config, db *sql.DB, sessions sessions.SessionManager) error {
 	// httpAddr := fmt.Sprintf("%s:%s", conf.Host, conf.portPlain)
 	context := &webapp{
@@ -57,13 +64,22 @@ func root[T any](w http.ResponseWriter, r *http.Request, context T) {
 
 var loginHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
 	defer r.Body.Close()
+
 	session, err := context.sessions.Validate(context.db, r)
 	if err == nil {
 		// TODO: Extend session upon device validation
 		log.Println("Session found - redirecting to app")
+		session.SetClientCookie(w)
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
+	// // TODO: Define initial profile setup?
+	// profile, err := userRead(context.db, session.UserId)
+	// if err != nil {
+	// 	log.Println("Can't find user profile")
+	// }
+	// // Assigning
+	// profile.ID = session.UserId
 
 	if r.Method == http.MethodPost {
 		login := sessions.Credentials{
@@ -81,24 +97,13 @@ var loginHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *htt
 			return
 		}
 		token := sessions.SaltedUUID(login.Password) // TODO: Should this be a method of SessionManager?
-		session := context.sessions.Create(context.db, token, loginDb.ID, time.Time{})
+		session := context.sessions.Create(context.db, token, session.UserId, time.Time{})
 
-		// TODO: Define initial profile setup?
-		profile, err := getDbUser(db, loginDb.id)
-		if err != nil {
-			log.Println("Can't find user profile")
-		}
-
-		// // err = (router, session.userId, session.token, session.created, session.expiry)
-		// // if err != nil {
-		// // 	log.Println("Can't store session")
-		// // }
-
-		// http.SetCookie(w, &http.Cookie{
-		// 	Name:    "session_token",
-		// 	Value:   session.token,
-		// 	Expires: session.expiry,
-		// })
+		http.SetCookie(w, &http.Cookie{
+			Name:    "session_token",
+			Value:   session.Token,
+			Expires: session.Expiry,
+		})
 		// // TODO: Post response for WebSock?
 		// http.Redirect(w, r, "/", http.StatusFound)
 		// return err

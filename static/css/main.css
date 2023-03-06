@@ -1,5 +1,6 @@
 @import url("./topnav.css");
 @import url("./content.css");
+@import url("./login.css");
 
 * {
     font-family: 'Lato', sans-serif;

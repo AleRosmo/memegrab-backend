@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log"
 	"memegrab/sessions"
+	"time"
+
+	"github.com/lib/pq"
 )
 
 type pgConf struct {
@@ -54,5 +57,43 @@ func dbLogin(db *sql.DB, username string) (*sessions.Credentials, error) {
 	default:
 		log.Println("Login general error")
 		return nil, err
+	}
+}
+
+func userRead(db *sql.DB, id int) (userProfile *profile, err error) {
+	var username string
+	var displayName string
+	var permissions []string
+	var isOnline bool
+	var lastLogin time.Time
+	var lastOffline time.Time
+
+	sqlStatement := `SELECT * FROM public.all_user_profiles WHERE id = $1`
+
+	var row *sql.Row
+
+	if id == 0 {
+		return userProfile, err
+	}
+	row = db.QueryRow(sqlStatement, id)
+	// Here means: it assigns err with the row.Scan()
+	// then "; err" means use "err" in the "switch" statement
+	switch err := row.Scan(&id, &username, &displayName, pq.Array(&permissions), &isOnline, &lastLogin, &lastOffline); err {
+	case sql.ErrNoRows:
+		log.Println("DATABASE", "No USER found!")
+		return userProfile, err
+	case nil:
+		userProfile := &profile{
+			ID:          id,
+			Username:    username,
+			Permissions: permissions,
+			DisplayName: displayName,
+			LastOffline: lastOffline,
+			IsOnline:    isOnline,
+		}
+		return userProfile, nil
+	default:
+		log.Println("DATABASE", "Error in UserRead")
+		return userProfile, err
 	}
 }
