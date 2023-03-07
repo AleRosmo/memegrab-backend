@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/lib/pq"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 type pgConf struct {
@@ -96,4 +98,14 @@ func userRead(db *sql.DB, id int) (userProfile *profile, err error) {
 		log.Println("DATABASE", "Error in UserRead")
 		return userProfile, err
 	}
+}
+
+func testInitGorm(conf pgConf) (*gorm.DB, error) {
+	psqlInfo := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s", conf.ip, conf.port, conf.user, conf.password, conf.db, conf.sslmode)
+	db := postgres.Open(psqlInfo)
+	gorm, err := gorm.Open(db, &gorm.Config{QueryFields: true})
+	if err != nil {
+		return nil, err
+	}
+	return gorm, nil
 }

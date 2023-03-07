@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"log"
 	"memegrab/cattp"
 	"memegrab/sessions"
@@ -37,7 +38,7 @@ func startWebApp(conf cattp.Config, db *sql.DB, sessions sessions.SessionManager
 	}
 
 	router := cattp.New(context)
-	router.HandleFunc("/", root[*webapp])
+	router.HandleFunc("/", rootHandler)
 	router.HandleFunc("/login", loginHandler)
 	router.HandleFunc("/test", testHandler)
 
@@ -50,17 +51,34 @@ func startWebApp(conf cattp.Config, db *sql.DB, sessions sessions.SessionManager
 	return nil
 }
 
-func root[T any](w http.ResponseWriter, r *http.Request, context T) {
+var rootHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
 	defer r.Body.Close()
-	// This can be property slice of HTTP Instance
-	index := filepath.Join("static", "app.html")
-	temp := template.Must(template.New("app.html").ParseFiles(index))
 
-	err := temp.Execute(w, nil)
+	session, err := context.sessions.Validate(context.db, r)
+	if err != nil {
+		// TODO: Extend session upon device validation
+		log.Println("Session error found - redirecting to login")
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+	profile, err := userRead(context.db, session.UserId)
 	if err != nil {
 		panic(err)
 	}
-}
+
+	// This can be property slice of HTTP Instance
+	index := filepath.Join("static", "app.html")
+	temp := template.Must(template.New("app.html").ParseFiles(index))
+	_json, err := json.Marshal(profile)
+
+	if err != nil {
+		panic(err)
+	}
+	err = temp.Execute(w, _json)
+	if err != nil {
+		panic(err)
+	}
+})
 
 var loginHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
 	defer r.Body.Close()
@@ -82,6 +100,11 @@ var loginHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *htt
 	// profile.ID = session.UserId
 
 	if r.Method == http.MethodPost {
+
+		err := r.ParseForm()
+		if err != nil {
+			panic(err)
+		}
 		login := sessions.Credentials{
 			Username: r.PostForm.Get("username"),
 			Password: r.PostForm.Get("password"),
@@ -97,15 +120,15 @@ var loginHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *htt
 			return
 		}
 		token := sessions.SaltedUUID(login.Password) // TODO: Should this be a method of SessionManager?
-		session := context.sessions.Create(context.db, token, session.UserId, time.Time{})
+		session := context.sessions.Create(context.db, token, loginDb.ID, time.Time{})
 
 		http.SetCookie(w, &http.Cookie{
-			Name:    "session_token",
+			Name:    "token",
 			Value:   session.Token,
 			Expires: session.Expiry,
 		})
 		// // TODO: Post response for WebSock?
-		// http.Redirect(w, r, "/", http.StatusFound)
+		http.Redirect(w, r, "/", http.StatusFound)
 		// return err
 	}
 	// TODO: Templates (If even to be used) must be generated elsewhere prior and reused (http custom type property?)

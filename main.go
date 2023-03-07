@@ -18,26 +18,35 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
+
+var _testGorm *gorm.DB
+
+type DatabaseRequired interface {
+	*sql.DB | *gorm.DB
+}
 
 type memeBot struct {
 	discord *discordgo.Session
 	// sessions sessions.SessionManager
 	conf memeBotConf
 	db   *sql.DB
+	gorm *gorm.DB
 }
 
 // TODO: Saved files in properties for memeBot, duplicate files
-func (bot *memeBot) saveDbMessage(file *fileInfo) (*fileInfo, error) {
-	query := `INSERT INTO public.saved (filename) VALUES ($1) RETURNING id;`
+func (bot *memeBot) saveDbMessage(file *FileInfo) (*FileInfo, error) {
+	query := `INSERT INTO public.saved (file_name) VALUES ($1) RETURNING id;`
 	var id int
 
-	err := bot.db.QueryRow(query, file.filename).Scan(&id)
+	err := bot.db.QueryRow(query, file.FileName).Scan(&id)
 	if err != nil {
 		return nil, err
 	}
-	file.id = id
-	log.Printf("Saved to DB %s with ID %d\n", file.filename, id)
+	file.ID = id
+	log.Printf("Saved to DB %s with ID %d\n", file.FileName, id)
 
 	return file, nil
 }
@@ -48,9 +57,9 @@ type memeBotConf struct {
 	observedChannels []string
 }
 
-type fileInfo struct {
-	id       int
-	filename string
+type FileInfo struct {
+	ID       int    `gorm:"primaryKey"`
+	FileName string `json:"file_name,omitempty"`
 }
 
 func init() {
@@ -104,9 +113,12 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
 	defer db.Close()
-
+	_testGorm, err = testInitGorm(dbConf)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Print(_testGorm)
 	memeBot := &memeBot{
 		discord: botSession,
 		conf:    conf,
@@ -120,7 +132,7 @@ func main() {
 
 	dbFiles := getDbMessages(db)
 	for _, file := range dbFiles {
-		fmt.Printf("DB Info: %d - Filename: %s\n", file.id, file.filename)
+		fmt.Printf("DB Info: %d - Filename: %s\n", file.ID, file.FileName)
 	}
 
 	messages := getChannelMessages(botSession, conf)
@@ -214,12 +226,24 @@ func (bot *memeBot) saveAttachment(attachments []*discordgo.MessageAttachment) e
 		}
 		log.Printf("Written %d bytes to file %s\n", written, attach.Filename)
 
-		f := &fileInfo{filename: attach.Filename}
-		f, err = bot.saveDbMessage(f)
-		if err != nil {
-			return err
-		}
-		log.Printf("Saved file %s in DB with ID %d\n", f.filename, f.id)
+		// f := &FileInfo{FileName: attach.Filename}
+		// f, err = bot.saveDbMessage(f)
+		// if err != nil {
+		// 	return err
+		// }
+		// log.Printf("Saved file %s in DB with ID %d\n", f.FileName, f.ID)
+
+		f := FileInfo{FileName: attach.Filename}
+		tx := bot.gorm.Table("public.saved").
+			Clauses(clause.Returning{}).
+			Create(&f)
+
+		savedFile := tx.Statement.Dest.(*FileInfo)
+		// GORM TEST
+		log.Printf("Saved file %s in DB with ID %d WITH GORM\n", f.FileName, savedFile.ID)
+		// var gormFileRead FileInfo
+		// _testGorm.Table("public.saved").First(&gormFileRead, "file_name = ?", attach.Filename)
+		// fmt.Println(gormFile)
 	}
 	return nil
 }
@@ -243,7 +267,7 @@ func getChannelMessages(botSession *discordgo.Session, conf memeBotConf) []*disc
 	return nil
 }
 
-func getDbMessages[T []*fileInfo](db *sql.DB) T {
+func getDbMessages[T []*FileInfo](db *sql.DB) T {
 	query := `SELECT * FROM public.saved;`
 
 	var files T
@@ -261,7 +285,7 @@ func getDbMessages[T []*fileInfo](db *sql.DB) T {
 		if err != nil {
 			panic(err)
 		}
-		info := &fileInfo{id, filename}
+		info := &FileInfo{id, filename}
 		files = append(files, info)
 	}
 	if rows.Err() != nil {

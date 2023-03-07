@@ -49,12 +49,12 @@ func (sm *Manager) Create(db *sql.DB, token string, id int, lenght time.Time) *s
 
 	// TODO: MUST be a db function
 	sqlStatement := `
-	INSERT INTO public.http_sessions (user_id, expires, session_token, created)
+	INSERT INTO public.http_sessions (user_id, expires, token, created)
 	VALUES ($1, $2, $3, $4)
 	ON CONFLICT (user_id) DO UPDATE
 		SET user_id = excluded.user_id,
 			expires = excluded.expires,
-			session_token = excluded.session_token,
+			token = excluded.token,
 			created = excluded.created;
 	`
 	db.QueryRow(sqlStatement, id, _lenght, token, session.Created)
@@ -68,7 +68,7 @@ func (sm *Manager) Create(db *sql.DB, token string, id int, lenght time.Time) *s
 // TODO: Add user id to cookies 'somehow'
 func (sm *Manager) Validate(db *sql.DB, r *http.Request) (*session, error) {
 
-	cookie, err := r.Cookie("session_token")
+	cookie, err := r.Cookie("token")
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +126,7 @@ func (sm *Manager) Validate(db *sql.DB, r *http.Request) (*session, error) {
 }
 
 func (sm *Manager) Read(db *sql.DB, token string) (*session, error) {
-	sqlStatement := `SELECT * FROM http.sessions WHERE session_token=$1;`
+	sqlStatement := `SELECT * FROM http.sessions WHERE token=$1;`
 
 	var id int
 	var created time.Time
@@ -153,7 +153,7 @@ func (sm *Manager) Read(db *sql.DB, token string) (*session, error) {
 }
 
 func (sm *Manager) Delete(db *sql.DB, token string) error {
-	sqlStatement := `DELTE FROM http.sessions WHERE session_token = $1;`
+	sqlStatement := `DELTE FROM http.sessions WHERE token = $1;`
 	res, err := db.Exec(sqlStatement, token)
 	if err != nil {
 		log.Println("Error in deleting session")
@@ -175,7 +175,7 @@ type session struct {
 
 func (s *session) SetClientCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
-		Name:    "session_token",
+		Name:    "token",
 		Value:   s.Token,
 		Expires: s.Expiry,
 	})

@@ -2,3 +2,5 @@
 .vscode
 certs/server.key
 .DS_Store
+img/*.png
+img/*.gif
