@@ -32,7 +32,7 @@ type memeBot struct {
 	discord *discordgo.Session
 	// sessions sessions.SessionManager
 	conf memeBotConf
-	db   *sql.DB
+	db   *sql.DB // ! DEPRECATE
 	gorm *gorm.DB
 }
 
@@ -114,15 +114,15 @@ func main() {
 		panic(err)
 	}
 	defer db.Close()
-	_testGorm, err = testInitGorm(dbConf)
+	dbGorm, err := testInitGorm(dbConf)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Print(_testGorm)
 	memeBot := &memeBot{
 		discord: botSession,
 		conf:    conf,
 		db:      db,
+		gorm:    dbGorm,
 	}
 
 	botSession.AddHandler(memeBot.messageHandler)

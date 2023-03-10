@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"encoding/json"
 	"log"
 	"memegrab/cattp"
 	"memegrab/sessions"
@@ -54,27 +53,27 @@ func startWebApp(conf cattp.Config, db *sql.DB, sessions sessions.SessionManager
 var rootHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
 	defer r.Body.Close()
 
-	session, err := context.sessions.Validate(context.db, r)
+	_, err := context.sessions.Validate(context.db, r)
 	if err != nil {
 		// TODO: Extend session upon device validation
 		log.Println("Session error found - redirecting to login")
 		http.Redirect(w, r, "/login", http.StatusFound)
 		return
 	}
-	profile, err := userRead(context.db, session.UserId)
-	if err != nil {
-		panic(err)
-	}
+	// profile, err := userRead(context.db, session.UserId)
+	// if err != nil {
+	// 	panic(err)
+	// }
 
 	// This can be property slice of HTTP Instance
 	index := filepath.Join("static", "app.html")
 	temp := template.Must(template.New("app.html").ParseFiles(index))
-	_json, err := json.Marshal(profile)
+	// _json, err := json.Marshal(profile)
 
 	if err != nil {
 		panic(err)
 	}
-	err = temp.Execute(w, _json)
+	err = temp.Execute(w, nil)
 	if err != nil {
 		panic(err)
 	}
