@@ -3,8 +3,10 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -124,8 +126,6 @@ func (bot *memeBot) messageHandler(session *discordgo.Session, message *discordg
 	log.Println("Saved message attachment")
 }
 
-// * SHURI SUGGESTS:
-// * To verify it's indetical get the lenght, split in 2048 bytes chunks and compare each chunk
 func (bot *memeBot) saveAttachment(file *FileInfo) error {
 	localFile, err := os.Create(filepath.Join("img", file.FileName))
 	if err != nil {
@@ -168,4 +168,92 @@ type FileInfo struct {
 	Sender    string    `gorm:"sender"`
 	Timestamp time.Time `gorm:"timestamp"`
 	Content   *[]byte   `gorm:"-"`
+}
+
+func checkFileExists(db *gorm.DB, file *FileInfo) bool {
+	result := db.Omit("Content").Where(&file).Find(&file)
+	if result.Error != nil {
+		panic(result.Error)
+	}
+	if result.RowsAffected < 1 {
+		return false
+	}
+	return true
+}
+
+// TODO: Multiple files
+func getMessageAttachment(message *discordgo.Message) *FileInfo {
+	for _, attach := range message.Attachments {
+		res, err := http.Get(attach.URL)
+
+		if err != nil {
+			log.Println("Can't download attachment from URL")
+			panic(err)
+		}
+
+		defer res.Body.Close()
+
+		fileContent, err := io.ReadAll(res.Body)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Printf("Read %d bytes from Response Body\n", len(fileContent))
+
+		file := &FileInfo{FileName: attach.Filename, Sender: message.Author.ID, Timestamp: message.Timestamp, Content: &fileContent}
+
+		return file
+	}
+	return nil
+}
+
+func getChannelMessages(botSession *discordgo.Session, conf *memeBotConf) []*discordgo.Message {
+	channels, err := botSession.GuildChannels(conf.guildId)
+	if err != nil {
+		panic(err)
+	}
+	for _, ch := range channels {
+		for _, obsId := range conf.observedChannels {
+			if ch.ID == obsId {
+				msg, err := botSession.ChannelMessages(ch.ID, 100, "", "", "")
+				if err != nil {
+					log.Println("Error in getting channel messages")
+				}
+				return msg
+			}
+		}
+	}
+	return nil
+}
+
+func getDbMessages(db *sql.DB) []*FileInfo {
+	query := `SELECT * FROM file_infos ORDER BY id ASC;`
+
+	var files []*FileInfo
+
+	rows, err := db.Query(query)
+	if err != nil {
+		panic(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int
+		var filename string
+		var sender string
+		var timestamp time.Time
+		// TODO: Recheck
+		err = rows.Scan(&id, &filename, &sender, &timestamp)
+		if err != nil {
+			panic(err)
+		}
+		file := &FileInfo{
+			ID:        id,
+			FileName:  filename,
+			Sender:    sender,
+			Timestamp: timestamp}
+		files = append(files, file)
+	}
+	if rows.Err() != nil {
+		panic(err)
+	}
+	return files
 }
