@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/rs/cors"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 )
@@ -102,7 +103,7 @@ func (router *Router[T]) Listen(conf *Config) error {
 	h2s := &http2.Server{}
 	h1s := &http.Server{
 		Addr:    fmt.Sprintf("%s:%s", conf.Host, conf.Port),
-		Handler: h2c.NewHandler(router, h2s),
+		Handler: cors.Default().Handler(h2c.NewHandler(router, h2s)),
 	}
 	err := (h1s.ListenAndServe())
 	return err

@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"log"
 	"memegrab/cattp"
 	"memegrab/sessions"
@@ -43,7 +42,6 @@ func startWebApp(conf cattp.Config, db *sql.DB, sessions sessions.SessionManager
 	router.HandleFunc("/login", loginHandler)
 	router.HandleFunc("/saved", getSavedHandler)
 	router.HandleFunc("/test", testHandler)
-	router.HandleFunc("/auth", authHandler)
 
 	err := router.Listen(&conf)
 	if err != nil {
@@ -86,12 +84,13 @@ var rootHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http
 var loginHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
 	defer r.Body.Close()
 
-	session, err := context.sessions.Validate(context.db, r)
+	dbSession, err := context.sessions.Validate(context.db, r)
+
 	if err == nil {
 		// TODO: Extend session upon device validation
 		log.Println("Session found - redirecting to app")
-		session.SetClientCookie(w)
-		http.Redirect(w, r, "/", http.StatusFound)
+		dbSession.SetClientCookie(w)
+		w.WriteHeader(http.StatusAccepted)
 		return
 	}
 	// // TODO: Define initial profile setup?
@@ -102,48 +101,52 @@ var loginHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *htt
 	// // Assigning
 	// profile.ID = session.UserId
 
-	if r.Method == http.MethodPost {
-
-		err := r.ParseForm()
-		if err != nil {
-			panic(err)
-		}
-		login := sessions.Credentials{
-			Username: r.PostForm.Get("username"),
-			Password: r.PostForm.Get("password"),
-		}
-
-		loginDb, err := dbLogin(context.db, login.Username)
-		if err != nil {
-			log.Println("Can't get credentials from DB")
-		}
-		err = bcrypt.CompareHashAndPassword([]byte(loginDb.Password), []byte(login.Password))
-		if err != nil {
-			log.Println("Incorrect password")
-			return
-		}
-		token := sessions.SaltedUUID(login.Password) // TODO: Should this be a method of SessionManager?
-		session := context.sessions.Create(context.db, token, loginDb.ID, time.Time{})
-
-		http.SetCookie(w, &http.Cookie{
-			Name:    "token",
-			Value:   session.Token,
-			Expires: session.Expiry,
-		})
-		// // TODO: Post response for WebSock?
-		http.Redirect(w, r, "/", http.StatusFound)
-		// return err
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
 	}
+
+	err = r.ParseForm()
+	if err != nil {
+		panic(err)
+	}
+	login := sessions.Credentials{
+		Username: r.PostForm.Get("username"),
+		Password: r.PostForm.Get("password"),
+	}
+
+	loginDb, err := dbLogin(context.db, login.Username)
+	if err != nil {
+		log.Println("Can't get credentials from DB")
+	}
+	err = bcrypt.CompareHashAndPassword([]byte(loginDb.Password), []byte(login.Password))
+	if err != nil {
+		log.Println("Incorrect password")
+		return
+	}
+	token := sessions.SaltedUUID(login.Password) // TODO: Should this be a method of SessionManager?
+	context.sessions.Create(context.db, token, loginDb.ID, time.Time{})
+
+	http.SetCookie(w, &http.Cookie{
+		Name:    "token",
+		Value:   dbSession.Token,
+		Expires: dbSession.Expiry,
+	})
+	// // TODO: Post response for WebSock?
+	w.WriteHeader(http.StatusAccepted)
+	// http.Redirect(w, r, "/", http.StatusFound)
+	// return err
+
 	// TODO: Templates (If even to be used) must be generated elsewhere prior and reused (http custom type property?)
-	if r.Method == http.MethodGet {
-		loginPage := filepath.Join("static", "login.html")
-		template := template.Must(template.New("login.html").ParseFiles(loginPage))
+	// if r.Method == http.MethodGet {
+	// 	loginPage := filepath.Join("static", "login.html")
+	// 	template := template.Must(template.New("login.html").ParseFiles(loginPage))
 
-		err := template.Execute(w, nil)
-		if err != nil {
-			log.Println("Error excuting template")
-		}
-	}
+	// 	err := template.Execute(w, nil)
+	// 	if err != nil {
+	// 		log.Println("Error excuting template")
+	// 	}
+	// }
 })
 
 var testHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
@@ -151,13 +154,13 @@ var testHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http
 	w.Write([]byte("Should be HTTP/2"))
 })
 
-var authHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
-	r.ParseForm()
-	data := r.PostForm
-	//!!!!!! REMOVEEEE !!!!
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Write([]byte(fmt.Sprintf("Received: %v", data)))
-})
+// var authHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
+// 	r.ParseForm()
+// 	data := r.PostForm
+// 	//!!!!!! REMOVEEEE !!!!
+// 	w.Header().Set("Access-Control-Allow-Origin", "*")
+// 	w.Write([]byte(fmt.Sprintf("Received: %v", data)))
+// })
 
 var getSavedHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
 
