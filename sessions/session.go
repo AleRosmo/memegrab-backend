@@ -9,9 +9,10 @@ import (
 )
 
 type Credentials struct {
-	ID       int
-	Username string
-	Password string
+	ID       int    `json:"id"`
+	Email    string `json:"email,omitempty"`
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
 }
 
 type SessionManager interface {

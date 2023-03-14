@@ -105,17 +105,13 @@ var loginHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *htt
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-
-	err = r.ParseForm()
+	var login *sessions.Credentials
+	err = json.NewDecoder(r.Body).Decode(&login)
 	if err != nil {
 		panic(err)
 	}
-	login := sessions.Credentials{
-		Username: r.PostForm.Get("username"),
-		Password: r.PostForm.Get("password"),
-	}
 
-	loginDb, err := dbLogin(context.db, login.Username)
+	loginDb, err := dbLogin(context.db, login.Email)
 	if err != nil {
 		log.Println("Can't get credentials from DB")
 	}
@@ -125,28 +121,15 @@ var loginHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *htt
 		return
 	}
 	token := sessions.SaltedUUID(login.Password) // TODO: Should this be a method of SessionManager?
-	context.sessions.Create(context.db, token, loginDb.ID, time.Time{})
+	session := context.sessions.Create(context.db, token, loginDb.ID, time.Time{})
 
 	http.SetCookie(w, &http.Cookie{
 		Name:    "token",
-		Value:   dbSession.Token,
-		Expires: dbSession.Expiry,
+		Value:   session.Token,
+		Expires: session.Expiry,
 	})
-	// // TODO: Post response for WebSock?
-	w.WriteHeader(http.StatusAccepted)
-	// http.Redirect(w, r, "/", http.StatusFound)
-	// return err
-
-	// TODO: Templates (If even to be used) must be generated elsewhere prior and reused (http custom type property?)
-	// if r.Method == http.MethodGet {
-	// 	loginPage := filepath.Join("static", "login.html")
-	// 	template := template.Must(template.New("login.html").ParseFiles(loginPage))
-
-	// 	err := template.Execute(w, nil)
-	// 	if err != nil {
-	// 		log.Println("Error excuting template")
-	// 	}
-	// }
+	// TODO: Post response for WebSock?
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 })
 
 var testHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {

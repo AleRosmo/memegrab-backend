@@ -100,10 +100,18 @@ func (router *Router[T]) HandleFunc(pattern string, handler func(w http.Response
 }
 
 func (router *Router[T]) Listen(conf *Config) error {
+
+	// c := cors.New(
+	// 	cors.Options{
+	// 		AllowedOrigins:   []string{"*"},
+	// 		AllowedHeaders:   []string{"*"},
+	// 		AllowCredentials: true,
+	// 	},
+	// )
 	h2s := &http2.Server{}
 	h1s := &http.Server{
 		Addr:    fmt.Sprintf("%s:%s", conf.Host, conf.Port),
-		Handler: cors.Default().Handler(h2c.NewHandler(router, h2s)),
+		Handler: cors.AllowAll().Handler(h2c.NewHandler(router, h2s)),
 	}
 	err := (h1s.ListenAndServe())
 	return err

@@ -37,15 +37,16 @@ func pgInit(conf pgConf) (*sql.DB, error) {
 	return db, nil
 }
 
-func dbLogin(db *sql.DB, username string) (*sessions.Credentials, error) {
-	sqlStatement := `SELECT id, username, password FROM users.login WHERE username=$1;`
+func dbLogin(db *sql.DB, email string) (*sessions.Credentials, error) {
+	sqlStatement := `SELECT id, username, password, email FROM users.login WHERE email=$1;`
 
 	var id int
+	var username string
 	var hash string
 
-	row := db.QueryRow(sqlStatement, username)
+	row := db.QueryRow(sqlStatement, email)
 
-	switch err := row.Scan(&id, &username, &hash); err {
+	switch err := row.Scan(&id, &username, &hash, &email); err {
 	case sql.ErrNoRows:
 		log.Println("No rows return")
 		return nil, err
@@ -53,6 +54,7 @@ func dbLogin(db *sql.DB, username string) (*sessions.Credentials, error) {
 		creds := sessions.Credentials{
 			ID:       id,
 			Username: username,
+			Email:    email,
 			Password: hash,
 		}
 		return &creds, nil
