@@ -163,11 +163,11 @@ type memeBotConf struct {
 }
 
 type FileInfo struct {
-	ID        int       `gorm:"primaryKey"`
-	FileName  string    `gorm:"file_name"`
-	Sender    string    `gorm:"sender"`
-	Timestamp time.Time `gorm:"timestamp"`
-	Content   *[]byte   `gorm:"-"`
+	ID        int       `gorm:"primaryKey" json:"id,omitempty"`
+	FileName  string    `gorm:"file_name" json:"file_name,omitempty"`
+	Sender    string    `gorm:"sender" json:"sender,omitempty"`
+	Timestamp time.Time `gorm:"timestamp" json:"timestamp,omitempty"`
+	Content   *[]byte   `gorm:"-" json:"content,omitempty"`
 }
 
 func checkFileExists(db *gorm.DB, file *FileInfo) bool {

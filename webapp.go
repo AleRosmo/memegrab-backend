@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"memegrab/cattp"
 	"memegrab/sessions"
@@ -42,6 +43,7 @@ func startWebApp(conf cattp.Config, db *sql.DB, sessions sessions.SessionManager
 	router.HandleFunc("/login", loginHandler)
 	router.HandleFunc("/saved", getSavedHandler)
 	router.HandleFunc("/test", testHandler)
+	router.HandleFunc("/auth", authHandler)
 
 	err := router.Listen(&conf)
 	if err != nil {
@@ -149,6 +151,14 @@ var testHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http
 	w.Write([]byte("Should be HTTP/2"))
 })
 
+var authHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
+	r.ParseForm()
+	data := r.PostForm
+	//!!!!!! REMOVEEEE !!!!
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Write([]byte(fmt.Sprintf("Received: %v", data)))
+})
+
 var getSavedHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
 
 	if r.Method != http.MethodGet {
@@ -162,7 +172,6 @@ var getSavedHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *
 	if err != nil {
 		panic(err)
 	}
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Write(saved)
 })
 
