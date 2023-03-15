@@ -176,9 +176,11 @@ type session struct {
 
 func (s *session) SetClientCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
-		Name:    "token",
-		Value:   s.Token,
-		Expires: s.Expiry,
+		Name:     "token",
+		Value:    s.Token,
+		Expires:  s.Expiry,
+		SameSite: http.SameSiteNoneMode,
+		Secure:   true,
 	})
 }
 

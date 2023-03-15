@@ -39,7 +39,7 @@ func startWebApp(conf cattp.Config, db *sql.DB, sessions sessions.SessionManager
 
 	router := cattp.New(context)
 	router.HandleFunc("/", rootHandler)
-	router.HandleFunc("/login", loginHandler)
+	router.HandleFunc("/auth", authHandler)
 	router.HandleFunc("/saved", getSavedHandler)
 	router.HandleFunc("/test", testHandler)
 
@@ -59,7 +59,7 @@ var rootHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http
 	if err != nil {
 		// TODO: Extend session upon device validation
 		log.Println("Session error found - redirecting to login")
-		http.Redirect(w, r, "/login", http.StatusFound)
+		http.Redirect(w, r, "http://localhost:3000/login", http.StatusFound)
 		return
 	}
 	// profile, err := userRead(context.db, session.UserId)
@@ -81,7 +81,7 @@ var rootHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http
 	}
 })
 
-var loginHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
+var authHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
 	defer r.Body.Close()
 
 	dbSession, err := context.sessions.Validate(context.db, r)
@@ -93,7 +93,7 @@ var loginHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *htt
 		w.WriteHeader(http.StatusAccepted)
 		return
 	}
-	// // TODO: Define initial profile setup?
+
 	// profile, err := userRead(context.db, session.UserId)
 	// if err != nil {
 	// 	log.Println("Can't find user profile")
@@ -113,23 +113,21 @@ var loginHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *htt
 
 	loginDb, err := dbLogin(context.db, login.Email)
 	if err != nil {
-		log.Println("Can't get credentials from DB")
+		log.Println("Can't get credentials from DB, wrong Email/Username")
+		w.WriteHeader(http.StatusUnauthorized)
+		return
 	}
 	err = bcrypt.CompareHashAndPassword([]byte(loginDb.Password), []byte(login.Password))
 	if err != nil {
 		log.Println("Incorrect password")
+		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 	token := sessions.SaltedUUID(login.Password) // TODO: Should this be a method of SessionManager?
 	session := context.sessions.Create(context.db, token, loginDb.ID, time.Time{})
-
-	http.SetCookie(w, &http.Cookie{
-		Name:    "token",
-		Value:   session.Token,
-		Expires: session.Expiry,
-	})
+	session.SetClientCookie(w)
 	// TODO: Post response for WebSock?
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	w.Write([]byte("k bro"))
 })
 
 var testHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
