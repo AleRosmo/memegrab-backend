@@ -15,8 +15,12 @@ type Credentials struct {
 	Password string `json:"password,omitempty"`
 }
 
+type Token = string
+type UserID = int
+type SessionLenght = time.Time
+
 type SessionManager interface {
-	Create(*sql.DB, string, int, time.Time) *session
+	Create(*sql.DB, Token, UserID, SessionLenght) *session
 	Delete(*sql.DB, string) error
 	Validate(*sql.DB, *http.Request) (*session, error)
 	Read(*sql.DB, string) (*session, error)
@@ -35,7 +39,7 @@ type Manager struct {
 }
 
 // TODO: Some decent in error checking would be nice
-func (sm *Manager) Create(db *sql.DB, token string, id int, lenght time.Time) *session {
+func (sm *Manager) Create(db *sql.DB, token Token, id UserID, lenght SessionLenght) *session {
 	var _lenght time.Time = sm.defaultLenght
 
 	if !lenght.IsZero() {
@@ -126,7 +130,7 @@ func (sm *Manager) Validate(db *sql.DB, r *http.Request) (*session, error) {
 	return userSession, nil
 }
 
-func (sm *Manager) Read(db *sql.DB, token string) (*session, error) {
+func (sm *Manager) Read(db *sql.DB, token Token) (*session, error) {
 	sqlStatement := `SELECT * FROM http.sessions WHERE token=$1;`
 
 	var id int
@@ -153,7 +157,7 @@ func (sm *Manager) Read(db *sql.DB, token string) (*session, error) {
 	}
 }
 
-func (sm *Manager) Delete(db *sql.DB, token string) error {
+func (sm *Manager) Delete(db *sql.DB, token Token) error {
 	sqlStatement := `DELTE FROM http.sessions WHERE token = $1;`
 	res, err := db.Exec(sqlStatement, token)
 	if err != nil {

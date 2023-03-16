@@ -4,3 +4,4 @@ certs/server.key
 .DS_Store
 img/*.png
 img/*.gif
+__debug_bin

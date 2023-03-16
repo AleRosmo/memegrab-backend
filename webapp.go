@@ -39,7 +39,8 @@ func startWebApp(conf cattp.Config, db *sql.DB, sessions sessions.SessionManager
 
 	router := cattp.New(context)
 	router.HandleFunc("/", rootHandler)
-	router.HandleFunc("/auth", authHandler)
+	router.HandleFunc("/auth/login", authHandler)
+	router.HandleFunc("/auth/validate", validateHandle)
 	router.HandleFunc("/saved", getSavedHandler)
 	router.HandleFunc("/test", testHandler)
 
@@ -94,13 +95,6 @@ var authHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http
 		return
 	}
 
-	// profile, err := userRead(context.db, session.UserId)
-	// if err != nil {
-	// 	log.Println("Can't find user profile")
-	// }
-	// // Assigning
-	// profile.ID = session.UserId
-
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
@@ -127,21 +121,49 @@ var authHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http
 	session := context.sessions.Create(context.db, token, loginDb.ID, time.Time{})
 	session.SetClientCookie(w)
 	// TODO: Post response for WebSock?
-	w.Write([]byte("k bro"))
+	profile, err := userRead(context.db, session.UserId)
+	if err != nil {
+		log.Println("Can't find user profile")
+	}
+	payload, err := json.Marshal(profile)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Write(payload)
+})
+
+var validateHandle = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
+	defer r.Body.Close()
+
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	dbSession, err := context.sessions.Validate(context.db, r)
+
+	if err != nil {
+		// TODO: Extend session upon device validation
+		log.Println("Invalid session")
+		dbSession.SetClientCookie(w)
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	token := sessions.SaltedUUID(dbSession.Token) // TODO: Should this be a method of SessionManager?
+	session := context.sessions.Create(context.db, token, dbSession.UserId, time.Time{})
+	session.SetClientCookie(w)
+	// TODO: Post response for WebSock?
+	w.Header().Add("Content-Type", "application/json")
+	payload, _ := json.Marshal("k bro")
+	w.Write(payload)
 })
 
 var testHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
 	w.Header().Add("Content-Type", "text/html")
 	w.Write([]byte("Should be HTTP/2"))
 })
-
-// var authHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
-// 	r.ParseForm()
-// 	data := r.PostForm
-// 	//!!!!!! REMOVEEEE !!!!
-// 	w.Header().Set("Access-Control-Allow-Origin", "*")
-// 	w.Write([]byte(fmt.Sprintf("Received: %v", data)))
-// })
 
 var getSavedHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
 
