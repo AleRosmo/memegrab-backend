@@ -17,11 +17,12 @@ import (
 type profile struct {
 	ID          int       `json:"user_id"`
 	Username    string    `json:"username"`
-	Permissions []string  `json:"isAdmin"`
-	DisplayName string    `json:"display_name"`
+	Email       string    `json:"email"`
+	Displayed   string    `json:"display_name"`
 	IsOnline    bool      `json:"isOnline"`
 	LastLogin   time.Time `json:"lastLogin"`
 	LastOffline time.Time `json:"lastOffline"`
+	IsAdmin     bool      `json:"isAdmin"`
 }
 
 type webapp struct {
@@ -41,7 +42,8 @@ func startWebApp(conf cattp.Config, db *sql.DB, sessions sessions.SessionManager
 	router.HandleFunc("/", rootHandler)
 	router.HandleFunc("/auth/login", authHandler)
 	router.HandleFunc("/auth/validate", validateHandle)
-	router.HandleFunc("/saved", getSavedHandler)
+	router.HandleFunc("/profile", profileHandle)
+	router.HandleFunc("/saved", savedHandler)
 	router.HandleFunc("/test", testHandler)
 
 	err := router.Listen(&conf)
@@ -120,6 +122,7 @@ var authHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http
 	token := sessions.SaltedUUID(login.Password) // TODO: Should this be a method of SessionManager?
 	session := context.sessions.Create(context.db, token, loginDb.ID, time.Time{})
 	session.SetClientCookie(w)
+
 	// TODO: Post response for WebSock?
 	profile, err := userRead(context.db, session.UserId)
 	if err != nil {
@@ -165,7 +168,7 @@ var testHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http
 	w.Write([]byte("Should be HTTP/2"))
 })
 
-var getSavedHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
+var savedHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
 
 	if r.Method != http.MethodGet {
 		return
@@ -179,6 +182,37 @@ var getSavedHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *
 		panic(err)
 	}
 	w.Write(saved)
+})
+
+var profileHandle = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
+	defer r.Body.Close()
+
+	if r.Method != http.MethodGet {
+		return
+	}
+
+	session, err := context.sessions.Validate(context.db, r)
+
+	if err != nil {
+		// TODO: Extend session upon device validation
+		log.Println("Unauthorized session")
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	// TODO: Post response for WebSock?
+	profile, err := userRead(context.db, session.UserId)
+	if err != nil {
+		log.Println("Can't find user profile")
+		w.WriteHeader(http.StatusBadRequest)
+	}
+	payload, err := json.Marshal(profile)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	log.Println("Found and sent profile")
+	w.Write(payload)
 })
 
 // func notFound(w http.ResponseWriter, r *http.Request) {

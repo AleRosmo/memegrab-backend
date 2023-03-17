@@ -7,7 +7,6 @@ import (
 	"memegrab/sessions"
 	"time"
 
-	"github.com/lib/pq"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -66,11 +65,12 @@ func dbLogin(db *sql.DB, email string) (*sessions.Credentials, error) {
 
 func userRead(db *sql.DB, id int) (userProfile *profile, err error) {
 	var username string
-	var displayName string
-	var permissions []string
+	var email string
+	var displayed string
 	var isOnline bool
 	var lastLogin time.Time
 	var lastOffline time.Time
+	var isAdmin bool
 
 	sqlStatement := `SELECT * FROM public.all_user_profiles WHERE id = $1`
 
@@ -82,7 +82,7 @@ func userRead(db *sql.DB, id int) (userProfile *profile, err error) {
 	row = db.QueryRow(sqlStatement, id)
 	// Here means: it assigns err with the row.Scan()
 	// then "; err" means use "err" in the "switch" statement
-	switch err := row.Scan(&id, &username, &displayName, pq.Array(&permissions), &isOnline, &lastLogin, &lastOffline); err {
+	switch err := row.Scan(&id, &username, &email, &displayed, &isOnline, &lastLogin, &lastOffline, &isAdmin); err {
 	case sql.ErrNoRows:
 		log.Println("DATABASE", "No USER found!")
 		return userProfile, err
@@ -90,11 +90,14 @@ func userRead(db *sql.DB, id int) (userProfile *profile, err error) {
 		userProfile := &profile{
 			ID:          id,
 			Username:    username,
-			Permissions: permissions,
-			DisplayName: displayName,
-			LastOffline: lastOffline,
+			Email:       email,
+			Displayed:   displayed,
 			IsOnline:    isOnline,
+			LastLogin:   lastLogin,
+			LastOffline: lastOffline,
+			IsAdmin:     isAdmin,
 		}
+		log.Println("Found profile")
 		return userProfile, nil
 	default:
 		log.Println("DATABASE", "Error in UserRead")
