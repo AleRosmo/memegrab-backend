@@ -185,6 +185,7 @@ func (s *session) SetClientCookie(w http.ResponseWriter) {
 		Expires:  s.Expiry,
 		SameSite: http.SameSiteNoneMode,
 		Secure:   true,
+		Path:     "/",
 	})
 }
 
