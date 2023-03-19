@@ -11,6 +11,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/golang-jwt/jwt"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -30,6 +31,11 @@ type webapp struct {
 	db       *sql.DB
 }
 
+type apiPayload struct {
+	success bool   `json:"success"`
+	message string `json:"message"`
+}
+
 // For URL use only domain name eg: google.it not https://google.it
 func startWebApp(conf cattp.Config, db *sql.DB, sessions sessions.SessionManager) error {
 	// httpAddr := fmt.Sprintf("%s:%s", conf.Host, conf.portPlain)
@@ -43,7 +49,7 @@ func startWebApp(conf cattp.Config, db *sql.DB, sessions sessions.SessionManager
 	router.HandleFunc("/auth/login", authHandler)
 	router.HandleFunc("/auth/validate", validateHandle)
 	router.HandleFunc("/profile", profileHandle)
-	router.HandleFunc("/saved", savedHandler)
+	router.HandleFunc("/saved", savedHandle)
 	router.HandleFunc("/test", testHandler)
 
 	err := router.Listen(&conf)
@@ -123,16 +129,37 @@ var authHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http
 	session := context.sessions.Create(context.db, token, loginDb.ID, time.Time{})
 	session.SetClientCookie(w)
 
-	// TODO: Post response for WebSock?
-	profile, err := userRead(context.db, session.UserId)
-	if err != nil {
-		log.Println("Can't find user profile")
+	// TODO: Move to method in session manager
+	jwtKey := []byte("palle")
+	claims := &sessions.Claims{
+		StandardClaims: jwt.StandardClaims{
+			ExpiresAt: time.Now().Add(time.Hour * 720).Unix(),
+		},
 	}
-	payload, err := json.Marshal(profile)
+	authToken := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	signedToken, err := authToken.SignedString(jwtKey)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		log.Println("Error marshaling JWT Token")
 		return
 	}
+
+	payload, err := json.Marshal(signedToken)
+	if err != nil {
+		log.Println("Error marshaling JWT Token")
+		return
+	}
+
+	// TODO: Post response for WebSock?
+	// profile, err := userRead(context.db, session.UserId)
+	// if err != nil {
+	// 	log.Println("Can't find user profile")
+	// }
+	// payload, err := json.Marshal(profile)
+	// if err != nil {
+	// 	w.WriteHeader(http.StatusInternalServerError)
+	// 	return
+	// }
 	w.Write(payload)
 })
 
@@ -144,18 +171,15 @@ var validateHandle = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *h
 		return
 	}
 
-	dbSession, err := context.sessions.Validate(context.db, r)
+	session, err := context.sessions.Validate(context.db, r)
 
 	if err != nil {
 		// TODO: Extend session upon device validation
 		log.Println("Invalid session")
-		dbSession.SetClientCookie(w)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
-	token := sessions.SaltedUUID(dbSession.Token) // TODO: Should this be a method of SessionManager?
-	session := context.sessions.Create(context.db, token, dbSession.UserId, time.Time{})
 	session.SetClientCookie(w)
 	// TODO: Post response for WebSock?
 	w.Header().Add("Content-Type", "application/json")
@@ -168,19 +192,27 @@ var testHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http
 	w.Write([]byte("Should be HTTP/2"))
 })
 
-var savedHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
-
+var savedHandle = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
+	defer r.Body.Close()
 	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	defer r.Body.Close()
 
+	// dbSession, err := context.sessions.Validate(context.db, r)
+
+	// if err != nil {
+	// 	// TODO: Extend session upon device validation
+	// 	log.Println("Invalid session")
+	// 	w.WriteHeader(http.StatusUnauthorized)
+	// 	return
+	// }
 	dbSaved := getDbMessages(context.db)
-
 	saved, err := json.Marshal(dbSaved)
 	if err != nil {
 		panic(err)
 	}
+	// log.Printf("[%d][ID %v]Get Saved Files\n", http.StatusOK, dbSession.UserId)
 	w.Write(saved)
 })
 
@@ -188,6 +220,7 @@ var profileHandle = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *ht
 	defer r.Body.Close()
 
 	if r.Method != http.MethodGet {
+		log.Println("Invalid Method")
 		return
 	}
 

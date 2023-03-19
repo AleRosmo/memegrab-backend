@@ -72,7 +72,7 @@ func userRead(db *sql.DB, id int) (userProfile *profile, err error) {
 	var lastOffline time.Time
 	var isAdmin bool
 
-	sqlStatement := `SELECT * FROM public.all_user_profiles WHERE id = $1`
+	sqlStatement := `SELECT * FROM users.all_users WHERE id = $1`
 
 	var row *sql.Row
 

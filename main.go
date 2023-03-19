@@ -80,7 +80,7 @@ func main() {
 	}
 
 	// Get a session manager instance
-	sessionLen := time.Now().Add(time.Hour * 720)
+	sessionLen := time.Hour * 720
 	sessions := sessions.New(sessionLen)
 
 	httpConf := cattp.Config{

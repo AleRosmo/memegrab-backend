@@ -106,7 +106,7 @@ func (router *Router[T]) Listen(conf *Config) error {
 			AllowedOrigins:   []string{"http://localhost:3000"},
 			AllowedHeaders:   []string{"Access-Control-Allow-Headers", "Access-Control-Allow-Origin", "Content-Type"},
 			AllowCredentials: true,
-			Debug:            true,
+			// Debug:            true,
 		},
 	)
 	h2s := &http2.Server{}

@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/golang-jwt/jwt"
 )
 
 type Credentials struct {
@@ -13,6 +15,17 @@ type Credentials struct {
 	Email    string `json:"email,omitempty"`
 	Username string `json:"username,omitempty"`
 	Password string `json:"password,omitempty"`
+}
+
+type Claims struct {
+	jwt.StandardClaims
+}
+
+type Auth struct {
+	UserId  int
+	Token   string
+	Created time.Time
+	Expiry  time.Time
 }
 
 type Token = string
@@ -26,7 +39,7 @@ type SessionManager interface {
 	Read(*sql.DB, string) (*session, error)
 }
 
-func New(dl time.Time) *Manager {
+func New(dl time.Duration) *Manager {
 	return &Manager{
 		defaultLenght:  dl,
 		activeSessions: make([]*session, 0),
@@ -34,13 +47,15 @@ func New(dl time.Time) *Manager {
 }
 
 type Manager struct {
-	defaultLenght  time.Time
+	defaultLenght  time.Duration
 	activeSessions []*session
+	activeAuths    []*Auth
 }
 
 // TODO: Some decent in error checking would be nice
 func (sm *Manager) Create(db *sql.DB, token Token, id UserID, lenght SessionLenght) *session {
-	var _lenght time.Time = sm.defaultLenght
+	// TODO: lenght to become Time.Duration and evaluate isZero
+	var _lenght time.Time = time.Now().Add(sm.defaultLenght)
 
 	if !lenght.IsZero() {
 		_lenght = lenght
@@ -119,13 +134,21 @@ func (sm *Manager) Validate(db *sql.DB, r *http.Request) (*session, error) {
 
 		log.Println("Session expired, removed")
 		return nil, errors.New("expired")
-		// TODO: SetCookie to be set from HTTP Server
-		// http.SetCookie(w, &http.Cookie{
-		// 	Name:    "session_token",
-		// 	Value:   "",
-		// 	Expires: time.Now(),
-		// })
-		// log.Println("Session expired, removed from client")
+	}
+
+	newLenght := time.Now().Add(sm.defaultLenght)
+	sm.activeSessions[idx].Expiry = newLenght
+
+	// TODO: MUST be a db function
+	query := `
+		UPDATE http.sessions
+			SET expiry = $2
+		WHERE id = $1;
+	`
+	_, err = db.Exec(query, userSession.UserId, newLenght)
+	if err != nil {
+		log.Println("Error updating session lenght")
+		return nil, errors.New("err_upd_session")
 	}
 	return userSession, nil
 }
