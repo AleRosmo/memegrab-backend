@@ -49,14 +49,12 @@ func New(dl time.Duration) *Manager {
 type Manager struct {
 	defaultLenght  time.Duration
 	activeSessions []*session
-	activeAuths    []*Auth
 }
 
 // TODO: Some decent in error checking would be nice
 func (sm *Manager) Create(db *sql.DB, token Token, id UserID, lenght SessionLenght) *session {
 	// TODO: lenght to become Time.Duration and evaluate isZero
 	var _lenght time.Time = time.Now().Add(sm.defaultLenght)
-
 	if !lenght.IsZero() {
 		_lenght = lenght
 	}
@@ -69,16 +67,18 @@ func (sm *Manager) Create(db *sql.DB, token Token, id UserID, lenght SessionLeng
 
 	// TODO: MUST be a db function
 	sqlStatement := `
-	INSERT INTO public.http_sessions (user_id, expires, token, created)
+	INSERT INTO http.sessions (id, expiry, token, created)
 	VALUES ($1, $2, $3, $4)
-	ON CONFLICT (user_id) DO UPDATE
-		SET user_id = excluded.user_id,
-			expires = excluded.expires,
+	ON CONFLICT (id) DO UPDATE
+		SET id = excluded.id,
+			expiry = excluded.expiry,
 			token = excluded.token,
 			created = excluded.created;
 	`
-	db.QueryRow(sqlStatement, id, _lenght, token, session.Created)
-
+	row := db.QueryRow(sqlStatement, id, _lenght, token, session.Created)
+	if err := row.Err(); err != nil {
+		return nil
+	}
 	sm.activeSessions = append(sm.activeSessions, session)
 	log.Println("Saved new session")
 	return session
@@ -88,7 +88,7 @@ func (sm *Manager) Create(db *sql.DB, token Token, id UserID, lenght SessionLeng
 // TODO: Add user id to cookies 'somehow'
 func (sm *Manager) Validate(db *sql.DB, r *http.Request) (*session, error) {
 
-	cookie, err := r.Cookie("token")
+	cookie, err := r.Cookie("memegrab")
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +116,7 @@ func (sm *Manager) Validate(db *sql.DB, r *http.Request) (*session, error) {
 		userSession, err = sm.Read(db, cookie.Value)
 		if err != nil {
 			log.Println("Error getting session from DB")
-			return nil, err
+			// return nil, err
 		}
 		if userSession == nil {
 			log.Println("Session not found on DB")
@@ -136,20 +136,20 @@ func (sm *Manager) Validate(db *sql.DB, r *http.Request) (*session, error) {
 		return nil, errors.New("expired")
 	}
 
-	newLenght := time.Now().Add(sm.defaultLenght)
-	sm.activeSessions[idx].Expiry = newLenght
+	// newLenght := time.Now().Add(sm.defaultLenght)
+	// sm.activeSessions[idx].Expiry = newLenght
 
-	// TODO: MUST be a db function
-	query := `
-		UPDATE http.sessions
-			SET expiry = $2
-		WHERE id = $1;
-	`
-	_, err = db.Exec(query, userSession.UserId, newLenght)
-	if err != nil {
-		log.Println("Error updating session lenght")
-		return nil, errors.New("err_upd_session")
-	}
+	// // TODO: MUST be a db function
+	// query := `
+	// 	UPDATE http.sessions
+	// 		SET expiry = $2
+	// 	WHERE id = $1;
+	// `
+	// _, err = db.Exec(query, userSession.UserId, newLenght)
+	// if err != nil {
+	// 	log.Println("Error updating session lenght")
+	// 	return nil, errors.New("err_upd_session")
+	// }
 	return userSession, nil
 }
 
@@ -203,11 +203,12 @@ type session struct {
 
 func (s *session) SetClientCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
-		Name:     "token",
+		Name:     "memegrab",
 		Value:    s.Token,
 		Expires:  s.Expiry,
 		SameSite: http.SameSiteNoneMode,
 		Secure:   true,
+		HttpOnly: true,
 		Path:     "/",
 	})
 }

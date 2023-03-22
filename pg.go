@@ -74,12 +74,10 @@ func userRead(db *sql.DB, id int) (userProfile *profile, err error) {
 
 	sqlStatement := `SELECT * FROM users.all_users WHERE id = $1`
 
-	var row *sql.Row
-
-	if id == 0 {
-		return userProfile, err
-	}
-	row = db.QueryRow(sqlStatement, id)
+	// if id == 0 {
+	// 	return userProfile, err
+	// }
+	row := db.QueryRow(sqlStatement, id)
 	// Here means: it assigns err with the row.Scan()
 	// then "; err" means use "err" in the "switch" statement
 	switch err := row.Scan(&id, &username, &email, &displayed, &isOnline, &lastLogin, &lastOffline, &isAdmin); err {

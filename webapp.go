@@ -7,8 +7,6 @@ import (
 	"memegrab/cattp"
 	"memegrab/sessions"
 	"net/http"
-	"path/filepath"
-	"text/template"
 	"time"
 
 	"github.com/golang-jwt/jwt"
@@ -31,8 +29,8 @@ type webapp struct {
 	db       *sql.DB
 }
 
-type apiPayload struct {
-	success bool   `json:"success"`
+type Payload struct {
+	user    bool   `json:"user"`
 	message string `json:"message"`
 }
 
@@ -45,9 +43,9 @@ func startWebApp(conf cattp.Config, db *sql.DB, sessions sessions.SessionManager
 	}
 
 	router := cattp.New(context)
-	router.HandleFunc("/", rootHandler)
-	router.HandleFunc("/auth/login", authHandler)
-	router.HandleFunc("/auth/validate", validateHandle)
+	// router.HandleFunc("/", rootHandler)
+	router.HandleFunc("/auth/signin", authHandler)
+	router.HandleFunc("/auth", validateHandle)
 	router.HandleFunc("/profile", profileHandle)
 	router.HandleFunc("/saved", savedHandle)
 	router.HandleFunc("/test", testHandler)
@@ -61,34 +59,29 @@ func startWebApp(conf cattp.Config, db *sql.DB, sessions sessions.SessionManager
 	return nil
 }
 
-var rootHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
-	defer r.Body.Close()
+// var rootHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
+// 	defer r.Body.Close()
 
-	_, err := context.sessions.Validate(context.db, r)
-	if err != nil {
-		// TODO: Extend session upon device validation
-		log.Println("Session error found - redirecting to login")
-		http.Redirect(w, r, "http://localhost:3000/login", http.StatusFound)
-		return
-	}
-	// profile, err := userRead(context.db, session.UserId)
-	// if err != nil {
-	// 	panic(err)
-	// }
+// 	_, err := context.sessions.Validate(context.db, r)
+// 	if err != nil {
+// 		// TODO: Extend session upon device validation
+// 		log.Println("Session error found")
+// 		return
+// 	}
 
-	// This can be property slice of HTTP Instance
-	index := filepath.Join("static", "app.html")
-	temp := template.Must(template.New("app.html").ParseFiles(index))
-	// _json, err := json.Marshal(profile)
+// 	// This can be property slice of HTTP Instance
+// 	index := filepath.Join("static", "app.html")
+// 	temp := template.Must(template.New("app.html").ParseFiles(index))
+// 	// _json, err := json.Marshal(profile)
 
-	if err != nil {
-		panic(err)
-	}
-	err = temp.Execute(w, nil)
-	if err != nil {
-		panic(err)
-	}
-})
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	err = temp.Execute(w, nil)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// })
 
 var authHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
 	defer r.Body.Close()
@@ -125,9 +118,6 @@ var authHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	token := sessions.SaltedUUID(login.Password) // TODO: Should this be a method of SessionManager?
-	session := context.sessions.Create(context.db, token, loginDb.ID, time.Time{})
-	session.SetClientCookie(w)
 
 	// TODO: Move to method in session manager
 	jwtKey := []byte("palle")
@@ -137,35 +127,30 @@ var authHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http
 		},
 	}
 	authToken := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-
-	signedToken, err := authToken.SignedString(jwtKey)
-	if err != nil {
-		log.Println("Error marshaling JWT Token")
-		return
-	}
-
-	payload, err := json.Marshal(signedToken)
+	token, err := authToken.SignedString(jwtKey)
+	session := context.sessions.Create(context.db, token, loginDb.ID, time.Time{})
+	session.SetClientCookie(w) // TODO: Reimplement for JWT and WebSession
 	if err != nil {
 		log.Println("Error marshaling JWT Token")
 		return
 	}
 
 	// TODO: Post response for WebSock?
-	// profile, err := userRead(context.db, session.UserId)
-	// if err != nil {
-	// 	log.Println("Can't find user profile")
-	// }
-	// payload, err := json.Marshal(profile)
-	// if err != nil {
-	// 	w.WriteHeader(http.StatusInternalServerError)
-	// 	return
-	// }
+	profile, err := userRead(context.db, session.UserId)
+	if err != nil {
+		log.Println("Can't find user profile")
+	}
+	payload, err := json.Marshal(profile)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	log.Printf("%s succesfully logged in.", profile.Displayed)
 	w.Write(payload)
 })
 
 var validateHandle = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
 	defer r.Body.Close()
-
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
@@ -180,11 +165,11 @@ var validateHandle = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *h
 		return
 	}
 
-	session.SetClientCookie(w)
+	// session.SetClientCookie(w)
 	// TODO: Post response for WebSock?
 	w.Header().Add("Content-Type", "application/json")
-	payload, _ := json.Marshal("k bro")
-	w.Write(payload)
+	log.Printf("[%d][ID %v] Validated Session\n", http.StatusOK, session.UserId)
+	w.WriteHeader(http.StatusOK)
 })
 
 var testHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
@@ -199,20 +184,23 @@ var savedHandle = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http
 		return
 	}
 
-	// dbSession, err := context.sessions.Validate(context.db, r)
+	session, err := context.sessions.Validate(context.db, r)
 
-	// if err != nil {
-	// 	// TODO: Extend session upon device validation
-	// 	log.Println("Invalid session")
-	// 	w.WriteHeader(http.StatusUnauthorized)
-	// 	return
-	// }
+	if err != nil {
+		// TODO: Extend session upon device validation
+		log.Println("Invalid session")
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	dbSaved := getDbMessages(context.db)
 	saved, err := json.Marshal(dbSaved)
 	if err != nil {
 		panic(err)
 	}
-	// log.Printf("[%d][ID %v]Get Saved Files\n", http.StatusOK, dbSession.UserId)
+	log.Printf("[%d][ID %v] Get Saved Files\n", http.StatusOK, session.UserId)
+
+	w.Header().Add("Content-Type", "application/json")
 	w.Write(saved)
 })
 
