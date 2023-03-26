@@ -181,7 +181,7 @@ func (sm *Manager) Read(db *sql.DB, token Token) (*session, error) {
 }
 
 func (sm *Manager) Delete(db *sql.DB, token Token) error {
-	sqlStatement := `DELTE FROM http.sessions WHERE token = $1;`
+	sqlStatement := `DELETE FROM http.sessions WHERE token = $1;`
 	res, err := db.Exec(sqlStatement, token)
 	if err != nil {
 		log.Println("Error in deleting session")
@@ -203,11 +203,11 @@ type session struct {
 
 func (s *session) SetClientCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
-		Name:     "memegrab",
-		Value:    s.Token,
-		Expires:  s.Expiry,
-		SameSite: http.SameSiteNoneMode,
-		Secure:   true,
+		Name:    "memegrab",
+		Value:   s.Token,
+		Expires: s.Expiry,
+		// SameSite: http.SameSiteNoneMode,
+		// Secure:   true, //! SET AGAIN WHEN USING HTTPS
 		HttpOnly: true,
 		Path:     "/",
 	})

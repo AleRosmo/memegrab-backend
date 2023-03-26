@@ -110,5 +110,6 @@ func testInitGorm(conf pgConf) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	gorm.AutoMigrate(&profile{})
 	return gorm, nil
 }

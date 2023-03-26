@@ -30,8 +30,8 @@ type webapp struct {
 }
 
 type Payload struct {
-	user    bool   `json:"user"`
-	message string `json:"message"`
+	User    bool   `json:"user"`
+	Message string `json:"message"`
 }
 
 // For URL use only domain name eg: google.it not https://google.it

@@ -226,7 +226,7 @@ func getChannelMessages(botSession *discordgo.Session, conf *memeBotConf) []*dis
 }
 
 func getDbMessages(db *sql.DB) []*FileInfo {
-	query := `SELECT * FROM file_infos ORDER BY id ASC;`
+	query := `SELECT * FROM file_infos ORDER BY id DESC;`
 
 	var files []*FileInfo
 
