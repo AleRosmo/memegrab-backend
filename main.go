@@ -65,10 +65,10 @@ func main() {
 
 	for _, message := range messages {
 		if len(message.Attachments) != 0 {
-			file := getMessageAttachment(message)
-			if file != nil {
+			files := getMessageAttachment(message)
+			for i, file := range files {
 				if !checkFileExists(bot.gorm, file) {
-					log.Println("Not found on DB, saving")
+					log.Printf("Saving file: %v", i)
 					err := bot.saveAttachment(file)
 					if err != nil {
 						log.Println("Error in saving attachment file")

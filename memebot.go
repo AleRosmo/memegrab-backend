@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -112,21 +113,26 @@ func (bot *memeBot) messageHandler(session *discordgo.Session, message *discordg
 		log.Printf("Reacted with 🍌 to message ID: %s\n", message.ID)
 	}
 
-	file := getMessageAttachment(message.Message)
-	exist := checkFileExists(bot.gorm, file)
-	if exist {
-		return
+	files := getMessageAttachment(message.Message)
+	for i, file := range files {
+		if checkFileExists(bot.gorm, file) {
+			return
+		}
+		log.Println("Not found on DB, saving")
+		err := bot.saveAttachment(file)
+		if err != nil {
+			log.Println("Error in saving attachment file")
+			return
+		}
+		log.Printf("Saving file: %v", i)
 	}
-	log.Println("Not found on DB, saving")
-	err := bot.saveAttachment(file)
-	if err != nil {
-		log.Println("Error in saving attachment file")
-		return
-	}
-	log.Println("Saved message attachment")
 }
 
 func (bot *memeBot) saveAttachment(file *FileInfo) error {
+	if file == nil {
+		return errors.New("file is nil")
+	}
+
 	localFile, err := os.Create(filepath.Join("img", file.FileName))
 	if err != nil {
 		log.Println("Error creating new file")
@@ -154,6 +160,7 @@ func (bot *memeBot) saveAttachment(file *FileInfo) error {
 	// _testGorm.Table("file_info").First(&gormFileRead, "file_name = ?", attach.Filename)
 	// fmt.Println(gormFile)
 	return nil
+
 }
 
 type memeBotConf struct {
@@ -182,7 +189,8 @@ func checkFileExists(db *gorm.DB, file *FileInfo) bool {
 }
 
 // TODO: Multiple files
-func getMessageAttachment(message *discordgo.Message) *FileInfo {
+func getMessageAttachment(message *discordgo.Message) []*FileInfo {
+	var attachments []*FileInfo
 	for _, attach := range message.Attachments {
 		res, err := http.Get(attach.URL)
 
@@ -200,10 +208,9 @@ func getMessageAttachment(message *discordgo.Message) *FileInfo {
 		fmt.Printf("Read %d bytes from Response Body\n", len(fileContent))
 
 		file := &FileInfo{FileName: attach.Filename, Sender: message.Author.ID, Timestamp: message.Timestamp, Content: &fileContent}
-
-		return file
+		attachments = append(attachments, file)
 	}
-	return nil
+	return attachments
 }
 
 func getChannelMessages(botSession *discordgo.Session, conf *memeBotConf) []*discordgo.Message {
