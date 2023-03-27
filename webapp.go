@@ -101,11 +101,11 @@ var authHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http
 		return
 	}
 	var login *sessions.Credentials
+	// payload, err := io.ReadAll(r.Body)
 	err = json.NewDecoder(r.Body).Decode(&login)
 	if err != nil {
 		panic(err)
 	}
-
 	loginDb, err := dbLogin(context.db, login.Email)
 	if err != nil {
 		log.Println("Can't get credentials from DB, wrong Email/Username")
