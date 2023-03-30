@@ -44,8 +44,10 @@ func startWebApp(conf cattp.Config, db *sql.DB, sessions sessions.SessionManager
 
 	router := cattp.New(context)
 	// router.HandleFunc("/", rootHandler)
-	router.HandleFunc("/auth/signin", authHandler)
 	router.HandleFunc("/auth", validateHandle)
+	router.HandleFunc("/auth/validate", validateHandle)
+	router.HandleFunc("/auth/signin", signinHandle)
+	router.HandleFunc("/auth/signout", signoutHandle)
 	router.HandleFunc("/profile", profileHandle)
 	router.HandleFunc("/saved", savedHandle)
 	router.HandleFunc("/test", testHandler)
@@ -83,7 +85,7 @@ func startWebApp(conf cattp.Config, db *sql.DB, sessions sessions.SessionManager
 // 	}
 // })
 
-var authHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
+var signinHandle = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
 	defer r.Body.Close()
 
 	dbSession, err := context.sessions.Validate(context.db, r)
@@ -169,6 +171,37 @@ var validateHandle = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *h
 	// TODO: Post response for WebSock?
 	w.Header().Add("Content-Type", "application/json")
 	log.Printf("[%d][ID %v] Validated Session\n", http.StatusOK, session.UserId)
+	w.WriteHeader(http.StatusOK)
+})
+
+var signoutHandle = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
+	defer r.Body.Close()
+	http.SetCookie(w, &http.Cookie{
+		Name:   "memegrab",
+		Value:  "",
+		Path:   "/",
+		MaxAge: -1,
+	})
+
+	// TODO: Delete session by user id
+	session, err := context.sessions.Validate(context.db, r)
+	if err != nil {
+		log.Println("Can't fine session on client")
+		// http.Redirect(w, r, "/login", http.StatusNotModified)
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:   "memegrab",
+		Value:  "",
+		Path:   "/",
+		MaxAge: -1,
+	})
+
+	err = context.sessions.Delete(context.db, session.Token)
+	if err != nil {
+		log.Println("Error deleting session", err)
+	}
+	log.Println("Signed out")
 	w.WriteHeader(http.StatusOK)
 })
 
