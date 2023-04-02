@@ -53,6 +53,7 @@ func New[T any](context T) *Router[T] {
 	//TODO:     ..filepath.join with "provided_dir" + "found dir name"  )
 	router.Mux.Handle("/css/", http.StripPrefix("/css/", http.FileServer(http.Dir("static/css"))))
 	router.Mux.Handle("/js/", http.StripPrefix("/js/", http.FileServer(http.Dir("static/js"))))
+	router.Mux.Handle("/img/", http.StripPrefix("/img/", http.FileServer(http.Dir("img"))))
 
 	router.Mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
