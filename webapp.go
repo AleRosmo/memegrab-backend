@@ -11,6 +11,7 @@ import (
 
 	"github.com/golang-jwt/jwt"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 type profile struct {
@@ -27,6 +28,7 @@ type profile struct {
 type webapp struct {
 	sessions sessions.SessionManager
 	db       *sql.DB
+	gorm     *gorm.DB
 }
 
 type Payload struct {
@@ -35,11 +37,12 @@ type Payload struct {
 }
 
 // For URL use only domain name eg: google.it not https://google.it
-func startWebApp(conf cattp.Config, db *sql.DB, sessions sessions.SessionManager) error {
+func startWebApp(conf cattp.Config, db *sql.DB, gorm *gorm.DB, sessions sessions.SessionManager) error {
 	// httpAddr := fmt.Sprintf("%s:%s", conf.Host, conf.portPlain)
 	context := &webapp{
 		db:       db,
 		sessions: sessions,
+		gorm:     gorm,
 	}
 
 	router := cattp.New(context)
@@ -48,6 +51,9 @@ func startWebApp(conf cattp.Config, db *sql.DB, sessions sessions.SessionManager
 	router.HandleFunc("/auth/validate", validateHandle)
 	router.HandleFunc("/auth/signin", signinHandle)
 	router.HandleFunc("/auth/signout", signoutHandle)
+
+	router.HandleFunc("/mod/review", approveHandle)
+
 	router.HandleFunc("/profile", profileHandle)
 	router.HandleFunc("/saved", savedHandle)
 	router.HandleFunc("/test", testHandler)
@@ -210,6 +216,41 @@ var testHandler = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http
 	w.Write([]byte("Should be HTTP/2"))
 })
 
+var approveHandle = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
+	defer r.Body.Close()
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	session, err := context.sessions.Validate(context.db, r)
+
+	fileId := r.URL.Query().Get("id")
+	isApproved := r.URL.Query().Get("approve")
+
+	approved := false
+
+	if isApproved == "true" {
+		approved = true
+	}
+
+	time := time.Now()
+
+	context.gorm.Model(&FileInfo{}).Where("id =?", fileId).Updates(FileInfo{Reviewed: true, TimeReviewed: &time, Approved: approved})
+
+	if err != nil {
+		// TODO: Extend session upon device validation
+		log.Println("Invalid session")
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	// session.SetClientCookie(w)
+	// TODO: Post response for WebSock?
+	// w.Header().Add("Content-Type", "application/json")
+	log.Printf("[%d]Approved post id\n", session.UserId)
+	w.WriteHeader(http.StatusOK)
+})
+
 var savedHandle = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http.Request, context *webapp) {
 	defer r.Body.Close()
 	if r.Method != http.MethodGet {
@@ -226,7 +267,7 @@ var savedHandle = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *http
 		return
 	}
 
-	dbSaved := getDbMessages(context.db)
+	dbSaved := getDbMessages(context.gorm)
 	saved, err := json.Marshal(dbSaved)
 	if err != nil {
 		panic(err)

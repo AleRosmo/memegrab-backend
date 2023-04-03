@@ -170,11 +170,22 @@ type memeBotConf struct {
 }
 
 type FileInfo struct {
-	ID        int       `gorm:"primaryKey" json:"id,omitempty"`
-	FileName  string    `gorm:"file_name" json:"file_name,omitempty"`
-	Sender    string    `gorm:"sender" json:"sender,omitempty"`
-	Timestamp time.Time `gorm:"timestamp" json:"timestamp,omitempty"`
-	Content   *[]byte   `gorm:"-" json:"content,omitempty"`
+	ID           int        `gorm:"primaryKey" json:"id,omitempty"`
+	FileName     string     `gorm:"file_name" json:"file_name,omitempty"`
+	Sender       string     `gorm:"sender" json:"sender,omitempty"`
+	Sent         *time.Time `gorm:"sent" json:"sent,omitempty"`
+	Reviewed     bool       `gorm:"reviewed" json:"reviewed,omitempty"`
+	TimeReviewed *time.Time `gorm:"time_reviewed" json:"time_reviewed,omitempty"`
+	Approved     bool       `gorm:"approved" json:"approved,omitempty"`
+	Content      *[]byte    `gorm:"-" json:"content,omitempty"`
+}
+
+func migrateTables(db *gorm.DB) error {
+	err := db.AutoMigrate(&FileInfo{})
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func checkFileExists(db *gorm.DB, file *FileInfo) bool {
@@ -207,7 +218,15 @@ func getMessageAttachment(message *discordgo.Message) []*FileInfo {
 		}
 		fmt.Printf("Read %d bytes from Response Body\n", len(fileContent))
 
-		file := &FileInfo{FileName: attach.Filename, Sender: message.Author.ID, Timestamp: message.Timestamp, Content: &fileContent}
+		file := &FileInfo{
+			FileName:     attach.Filename,
+			Sender:       message.Author.ID,
+			Sent:         &message.Timestamp,
+			Reviewed:     false,
+			TimeReviewed: nil,
+			Approved:     false,
+			Content:      &fileContent}
+
 		attachments = append(attachments, file)
 	}
 	return attachments
@@ -232,35 +251,56 @@ func getChannelMessages(botSession *discordgo.Session, conf *memeBotConf) []*dis
 	return nil
 }
 
-func getDbMessages(db *sql.DB) []*FileInfo {
-	query := `SELECT * FROM file_infos ORDER BY id DESC;`
+func getDbMessages(db *gorm.DB) []*FileInfo {
+	var fileInfo []*FileInfo
 
-	var files []*FileInfo
-
-	rows, err := db.Query(query)
-	if err != nil {
-		panic(err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id int
-		var filename string
-		var sender string
-		var timestamp time.Time
-		// TODO: Recheck
-		err = rows.Scan(&id, &filename, &sender, &timestamp)
-		if err != nil {
-			panic(err)
-		}
-		file := &FileInfo{
-			ID:        id,
-			FileName:  filename,
-			Sender:    sender,
-			Timestamp: timestamp}
-		files = append(files, file)
-	}
-	if rows.Err() != nil {
-		panic(err)
-	}
-	return files
+	// db.Find(&[]FileInfo{}).Scan(&fileInfo)
+	// if result.Error != nil {
+	// 	panic(result.Error)
+	// }
+	return fileInfo
 }
+
+// func getDbMessagesOld(db *sql.DB) []*FileInfo {
+// 	query := `SELECT * FROM file_infos ORDER BY id DESC;`
+
+// 	var files []*FileInfo
+
+// 	rows, err := db.Query(query)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	defer rows.Close()
+// 	for rows.Next() {
+// 		var id int
+// 		var filename string
+// 		var sender string
+// 		var sent *time.Time
+// 		var reviewed bool
+// 		var timeReviewed *time.Time
+// 		var approved bool
+
+// 		// TODO: Recheck
+// 		err = rows.Scan(&id, &filename, &sender, &sent, &reviewed, &timeReviewed, &timeReviewed, &approved)
+// 		if err != nil {
+// 			panic(err)
+// 		}
+
+// 		file := &FileInfo{
+// 			ID:           id,
+// 			FileName:     filename,
+// 			Sender:       sender,
+// 			Sent:         sent,
+// 			Reviewed:     reviewed,
+// 			TimeReviewed: timeReviewed,
+// 			Approved:     approved,
+// 		}
+
+// 		files = append(files, file)
+// 	}
+
+// 	if rows.Err() != nil {
+// 		panic(err)
+// 	}
+// 	return files
+// }

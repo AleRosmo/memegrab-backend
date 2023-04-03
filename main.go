@@ -55,7 +55,12 @@ func main() {
 	bot := New(conf)
 	defer bot.db.Close()
 
-	dbFiles := getDbMessages(bot.db)
+	err := migrateTables(bot.gorm)
+	if err != nil {
+		panic(err)
+	}
+
+	dbFiles := getDbMessages(bot.gorm)
 
 	for _, file := range dbFiles {
 		fmt.Printf("DB Info: %d - Filename: %s\n", file.ID, file.FileName)
@@ -64,17 +69,23 @@ func main() {
 	messages := getChannelMessages(bot.discord, conf)
 
 	for _, message := range messages {
-		if len(message.Attachments) != 0 {
-			files := getMessageAttachment(message)
-			for i, file := range files {
-				if !checkFileExists(bot.gorm, file) {
-					log.Printf("Saving file: %v", i)
-					err := bot.saveAttachment(file)
-					if err != nil {
-						log.Println("Error in saving attachment file")
-						return
-					}
-				}
+		if len(message.Attachments) == 0 {
+			continue
+		}
+
+		files := getMessageAttachment(message)
+
+		for i, file := range files {
+
+			if checkFileExists(bot.gorm, file) {
+				continue
+			}
+
+			log.Printf("Saving file: %v", i)
+
+			if err := bot.saveAttachment(file); err != nil {
+				log.Println("Error in saving attachment file")
+				return
 			}
 		}
 	}
@@ -93,7 +104,7 @@ func main() {
 		URL: os.Getenv("HTTP_URL"),
 	}
 
-	err := startWebApp(httpConf, bot.db, sessions)
+	err = startWebApp(httpConf, bot.db, bot.gorm, sessions)
 
 	if err != nil {
 		panic(err)
