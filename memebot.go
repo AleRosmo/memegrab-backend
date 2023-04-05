@@ -80,10 +80,6 @@ type memeBot struct {
 func (bot *memeBot) messageHandler(session *discordgo.Session, message *discordgo.MessageCreate) {
 	log.Printf("New message from %v (%v)\n", message.Member.Nick, message.Author.ID)
 
-	// if strings.Contains(message.Content, "fanculo") {
-	// 	bot.discord.ChannelMessageSend(message.ChannelID, "Ma si andiamo tutti affanculo")
-	// }
-
 	if message.Author.ID == session.State.User.ID {
 		return
 	}
@@ -253,11 +249,15 @@ func getChannelMessages(botSession *discordgo.Session, conf *memeBotConf) []*dis
 
 func getDbMessages(db *gorm.DB) []*FileInfo {
 	var fileInfo []*FileInfo
+	tx := db.Find(&[]FileInfo{}).Scan(&fileInfo)
+	// ont=/.Model(&FileInfo{}).Where("id =?", fileId).Updates(FileInfo{Reviewed: true, TimeReviewed: &time, Approved: approved})
 
-	// db.Find(&[]FileInfo{}).Scan(&fileInfo)
-	// if result.Error != nil {
-	// 	panic(result.Error)
-	// }
+	if tx.Error != nil {
+		// TODO: Extend session upon device validation
+		log.Println("Error getting messages")
+		return nil
+	}
+
 	return fileInfo
 }
 

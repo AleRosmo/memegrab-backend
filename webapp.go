@@ -223,21 +223,30 @@ var approveHandle = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *ht
 		return
 	}
 	session, err := context.sessions.Validate(context.db, r)
+	if err != nil {
+		// TODO: Extend session upon device validation
+		log.Println("Invalid session")
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
 
 	fileId := r.URL.Query().Get("id")
-	isApproved := r.URL.Query().Get("approve")
+	isApproved := r.URL.Query().Get("approved")
 
+	if (fileId == "") || (isApproved == "") {
+		log.Println("Arguments not provided")
+	}
 	approved := false
-
 	if isApproved == "true" {
 		approved = true
 	}
+	log.Printf("Approved: %v\n", approved)
 
 	time := time.Now()
 
-	context.gorm.Model(&FileInfo{}).Where("id =?", fileId).Updates(FileInfo{Reviewed: true, TimeReviewed: &time, Approved: approved})
+	tx := context.gorm.Model(&FileInfo{}).Where("id =?", fileId).Updates(FileInfo{Reviewed: true, TimeReviewed: &time, Approved: approved})
 
-	if err != nil {
+	if tx.Error != nil {
 		// TODO: Extend session upon device validation
 		log.Println("Invalid session")
 		w.WriteHeader(http.StatusUnauthorized)
@@ -247,7 +256,7 @@ var approveHandle = cattp.HandlerFunc[*webapp](func(w http.ResponseWriter, r *ht
 	// session.SetClientCookie(w)
 	// TODO: Post response for WebSock?
 	// w.Header().Add("Content-Type", "application/json")
-	log.Printf("[%d]Approved post id\n", session.UserId)
+	log.Printf("[%d] Reviewed post %s\n", session.UserId, fileId)
 	w.WriteHeader(http.StatusOK)
 })
 
